@@ -163,3 +163,44 @@ body {
 .cyber-pulse {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* ─── Light Mode High-Contrast & Border Clarity (html:not(.dark)) ─── */
+
+/* 1. Strengthen Light Mode Borders to crisp #cbd5e1 (slate-300) */
+html:not(.dark) .border-slate-100,
+html:not(.dark) .border-slate-200,
+html:not(.dark) .border-gray-200,
+html:not(.dark) .light-card,
+html:not(.dark) .glass-panel-light {
+  border-color: #cbd5e1;
+}
+
+/* 2. High-Contrast Text & Document Preview */
+/* Strengthen washed-out secondary text to #475569 (slate-600) */
+html:not(.dark) .text-slate-400,
+html:not(.dark) .text-slate-500,
+html:not(.dark) .text-gray-500 {
+  color: #475569;
+}
+
+/* Make body text and extracted document preview text sharp #0f172a (slate-900) */
+html:not(.dark) .text-slate-600,
+html:not(.dark) .text-slate-700,
+html:not(.dark) pre,
+html:not(.dark) code,
+html:not(.dark) .whitespace-pre-wrap:not(.text-white) {
+  color: #0f172a;
+}
+
+/* Preserve high-contrast light text inside dark code blocks in Chat */
+html:not(.dark) pre.bg-slate-900,
+html:not(.dark) pre.bg-slate-900 code,
+html:not(.dark) pre.bg-slate-950,
+html:not(.dark) pre.bg-slate-950 code {
+  color: #f1f5f9;
+}
+
+/* Preserve indigo contrast on inline code badges */
+html:not(.dark) code.text-indigo-700 {
+  color: #4338ca;
+}
