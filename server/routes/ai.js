@@ -62,11 +62,16 @@ async function userHasWorkspaceAccess(workspaceId, user) {
 }
 
 // ── GET /api/ai/sessions/:workspace_id ───────────────────────────────────────
-// Returns all chat sessions for a workspace
+// Returns all chat sessions for a workspace (Strict Tenant Check)
 router.get('/sessions/:workspace_id', async (req, res) => {
   try {
     const normalized = normalizeWorkspaceId(req.params.workspace_id);
     if (!normalized.valid) return res.json([]);
+
+    const hasAccess = await userHasWorkspaceAccess(normalized.value, req.user);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied. You do not own this workspace.' });
+    }
 
     const result = await pool.query(
       `SELECT s.id, s.workspace_id, s.title, s.created_at, s.updated_at,
@@ -86,12 +91,17 @@ router.get('/sessions/:workspace_id', async (req, res) => {
 });
 
 // ── POST /api/ai/sessions ────────────────────────────────────────────────────
-// Creates a new chat session for a workspace
+// Creates a new chat session for a workspace (Strict Tenant Check)
 router.post('/sessions', async (req, res) => {
   try {
     const { workspace_id, title } = req.body;
     const normalized = normalizeWorkspaceId(workspace_id);
     if (!normalized.valid) return res.status(400).json({ message: 'Invalid workspace ID.' });
+
+    const hasAccess = await userHasWorkspaceAccess(normalized.value, req.user);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied. You do not own this workspace.' });
+    }
 
     const sessionTitle = (title || 'New Chat').trim();
     const result = await pool.query(
@@ -106,11 +116,27 @@ router.post('/sessions', async (req, res) => {
 });
 
 // ── DELETE /api/ai/sessions/:id ──────────────────────────────────────────────
-// Deletes a specific chat session and its messages
+// Deletes a specific chat session and its messages (Strict Tenant Check)
 router.delete('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM chat_sessions WHERE id = $1', [id]);
+    const userIdNum = parseInt(req.user.id, 10);
+    const userIdStr = String(req.user.id);
+
+    const result = await pool.query(
+      `DELETE FROM chat_sessions s
+       USING workspaces w
+       WHERE s.id = $1
+         AND s.workspace_id = w.id
+         AND (w.user_id = $2 OR w.owner_id = $3)
+       RETURNING s.*`,
+      [id, isNaN(userIdNum) ? null : userIdNum, userIdStr]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Session not found or access denied.' });
+    }
+
     return res.json({ success: true, message: 'Session deleted.' });
   } catch (err) {
     console.error('Delete Session Error:', err);
@@ -124,7 +150,8 @@ router.patch('/sessions/:sessionId', async (req, res) => {
   try {
     const sessionId = req.params.sessionId;
     const { title } = req.body;
-    const userId = req.user?.id;
+    const userIdNum = parseInt(req.user?.id, 10);
+    const userIdStr = String(req.user?.id || '');
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ message: 'Session title cannot be empty.' });
@@ -135,28 +162,17 @@ router.patch('/sessions/:sessionId', async (req, res) => {
       return res.status(400).json({ message: 'Session title cannot exceed 100 characters.' });
     }
 
-    // Update title for that sessionId and user_id in PostgreSQL
-    let result;
-    if (userId) {
-      result = await pool.query(
-        `UPDATE chat_sessions s
-         SET title = $1, updated_at = CURRENT_TIMESTAMP
-         FROM workspaces w
-         WHERE s.id = $2
-           AND s.workspace_id = w.id
-           AND w.user_id = $3
-         RETURNING s.id, s.workspace_id, s.title, s.created_at, s.updated_at`,
-        [trimmedTitle, sessionId, userId]
-      );
-    } else {
-      result = await pool.query(
-        `UPDATE chat_sessions
-         SET title = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2
-         RETURNING id, workspace_id, title, created_at, updated_at`,
-        [trimmedTitle, sessionId]
-      );
-    }
+    // Update title ensuring workspace ownership by authenticated user
+    const result = await pool.query(
+      `UPDATE chat_sessions s
+       SET title = $1, updated_at = CURRENT_TIMESTAMP
+       FROM workspaces w
+       WHERE s.id = $2
+         AND s.workspace_id = w.id
+         AND (w.user_id = $3 OR w.owner_id = $4)
+       RETURNING s.id, s.workspace_id, s.title, s.created_at, s.updated_at`,
+      [trimmedTitle, sessionId, isNaN(userIdNum) ? null : userIdNum, userIdStr]
+    );
 
     if (result.rows.length === 0) {
       const existsCheck = await pool.query('SELECT id FROM chat_sessions WHERE id = $1', [sessionId]);
@@ -174,11 +190,16 @@ router.patch('/sessions/:sessionId', async (req, res) => {
 });
 
 // ── GET /api/ai/history/:workspace_id ────────────────────────────────────────
-// Returns chat history for a workspace (optionally scoped to a session_id)
+// Returns chat history for a workspace (Strict Tenant Check)
 router.get('/history/:workspace_id', async (req, res) => {
   try {
     const normalized = normalizeWorkspaceId(req.params.workspace_id);
     if (!normalized.valid) return res.json([]);
+
+    const hasAccess = await userHasWorkspaceAccess(normalized.value, req.user);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied. You do not own this workspace.' });
+    }
 
     const reqSessionId = req.query.session_id ? parseInt(req.query.session_id, 10) : null;
 
@@ -210,11 +231,16 @@ router.get('/history/:workspace_id', async (req, res) => {
 });
 
 // ── DELETE /api/ai/history/:workspace_id ─────────────────────────────────────
-// Clears chat messages for a workspace or session
+// Clears chat messages for a workspace or session (Strict Tenant Check)
 router.delete('/history/:workspace_id', async (req, res) => {
   try {
     const normalized = normalizeWorkspaceId(req.params.workspace_id);
     if (!normalized.valid) return res.status(400).json({ message: 'Invalid workspace ID.' });
+
+    const hasAccess = await userHasWorkspaceAccess(normalized.value, req.user);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied. You do not own this workspace.' });
+    }
 
     const reqSessionId = req.query.session_id ? parseInt(req.query.session_id, 10) : null;
 
@@ -231,7 +257,7 @@ router.delete('/history/:workspace_id', async (req, res) => {
 });
 
 // ── PUT /api/ai/message/:id ──────────────────────────────────────────────────
-// Edit / update an existing chat message
+// Edit / update an existing chat message (Strict Tenant Check)
 router.put('/message/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -240,13 +266,22 @@ router.put('/message/:id', async (req, res) => {
       return res.status(400).json({ message: 'Message text is required.' });
     }
 
+    const userIdNum = parseInt(req.user.id, 10);
+    const userIdStr = String(req.user.id);
+
     const result = await pool.query(
-      'UPDATE chat_messages SET message = $1 WHERE id = $2 RETURNING *',
-      [message.trim(), id]
+      `UPDATE chat_messages m
+       SET message = $1
+       FROM workspaces w
+       WHERE m.id = $2
+         AND m.workspace_id = w.id
+         AND (w.user_id = $3 OR w.owner_id = $4)
+       RETURNING m.*`,
+      [message.trim(), id, isNaN(userIdNum) ? null : userIdNum, userIdStr]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Message not found.' });
+      return res.status(404).json({ message: 'Message not found or access denied.' });
     }
 
     return res.json({ success: true, message: result.rows[0] });

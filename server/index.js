@@ -36,9 +36,11 @@ async function initDatabase() {
     } else {
       console.log('Database tables already exist.');
       try {
-        await pool.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_type VARCHAR(50);');
+        await pool.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_type VARCHAR(150);');
+        await pool.query('ALTER TABLE documents ALTER COLUMN file_type TYPE VARCHAR(150);');
         await pool.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_size BIGINT;');
         await pool.query('ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS user_id INTEGER;');
+        await pool.query('ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS owner_id VARCHAR(255);');
         await pool.query('ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS description TEXT;');
         await pool.query(`
           CREATE TABLE IF NOT EXISTS chat_sessions (

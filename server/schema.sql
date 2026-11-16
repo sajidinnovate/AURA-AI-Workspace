@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Workspaces Table
--- owner_id references users(id) which is INTEGER (SERIAL)
 CREATE TABLE IF NOT EXISTS workspaces (
     id          SERIAL PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    owner_id    VARCHAR(255),
     name        VARCHAR(255) NOT NULL,
     description TEXT,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS documents (
     workspace_id  INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     title         VARCHAR(500) NOT NULL,
     content_text  TEXT NOT NULL DEFAULT '',
-    file_type     VARCHAR(20),
+    file_type     VARCHAR(150),
     file_size     BIGINT,
     created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );

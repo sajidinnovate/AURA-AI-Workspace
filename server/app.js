@@ -8,37 +8,39 @@ const aiRoutes = require('./routes/ai');
 
 const app = express();
 
-// CORS — allow local dev and production Vercel origins
-const clientUrl = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.replace(/\/$/, '')
-  : null;
+// CORS Configuration — strict production & local dev origins (no insecure wildcards)
+const configuredOrigins = (process.env.CLIENT_URL || process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((url) => url.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 
-const allowedOrigins = [
-  clientUrl,
+const defaultDevOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://localhost:5173',
-].filter(Boolean);
+];
+
+const allowedOrigins = new Set([...configuredOrigins, ...defaultDevOrigins]);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (
-        !origin ||
-        allowedOrigins.includes(origin) ||
-        origin.endsWith('.vercel.app')
-      ) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS policy: origin ${origin} not allowed`));
+      // Allow non-browser / server-to-server requests with no origin header
+      if (!origin) return callback(null, true);
+
+      const normalizedOrigin = origin.replace(/\/$/, '');
+      if (allowedOrigins.has(normalizedOrigin)) {
+        return callback(null, true);
       }
+
+      return callback(new Error(`CORS policy: origin ${origin} not allowed`));
     },
     credentials: true,
   })
 );
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // API Routes
 app.use('/api/auth', authRoutes);

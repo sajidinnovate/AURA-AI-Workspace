@@ -20,7 +20,7 @@ const normalizeWorkspaceId = (workspace_id) => {
 // In-memory multer storage (no temp files on disk)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max
   fileFilter: (req, file, cb) => {
     const ext = (file.originalname || '').toLowerCase();
     const validExtensions = [
@@ -188,18 +188,26 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// ── DELETE /api/documents/:id — Delete a document ───────────────────────────
+// ── DELETE /api/documents/:id — Delete a document (Strict Tenant Ownership Check) ──
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const userIdNum = parseInt(req.user.id, 10);
+    const userIdStr = String(req.user.id);
 
+    // Enforce workspace ownership before deletion
     const result = await pool.query(
-      'DELETE FROM documents WHERE id = $1 RETURNING *',
-      [id]
+      `DELETE FROM documents d
+       USING workspaces w
+       WHERE d.id = $1
+         AND d.workspace_id = w.id
+         AND (w.user_id = $2 OR w.owner_id = $3)
+       RETURNING d.*`,
+      [id, isNaN(userIdNum) ? null : userIdNum, userIdStr]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Document not found.' });
+      return res.status(404).json({ message: 'Document not found or access denied.' });
     }
 
     return res.json({ message: 'Document deleted successfully.', document: result.rows[0] });
