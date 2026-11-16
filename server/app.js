@@ -8,17 +8,27 @@ const aiRoutes = require('./routes/ai');
 
 const app = express();
 
-// CORS — allow local dev origins
+// CORS — allow local dev and production Vercel origins
+const clientUrl = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.replace(/\/$/, '')
+  : null;
+
 const allowedOrigins = [
+  clientUrl,
   'http://127.0.0.1:3000',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://localhost:5173',
-];
+].filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app')
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`CORS policy: origin ${origin} not allowed`));
