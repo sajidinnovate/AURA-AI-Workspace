@@ -142,7 +142,7 @@ export default function AuthPage() {
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
                 <input
-                  type="email"
+                  type="email" K
                   required
                   placeholder="Enter Your Email"
                   value={email}
